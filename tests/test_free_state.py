@@ -4,7 +4,7 @@ from typing import Optional
 
 import pytest
 
-from state_machine import MaxStepsExceededError, NoMatchingEdgeError, StateMachine
+from free_state import MaxStepsExceededError, NoMatchingEdgeError, StateMachine
 
 
 @dataclass(frozen=True)

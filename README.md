@@ -1,4 +1,4 @@
-# state_machine
+# free-state
 
 A fluent, checkpointed state machine for sequencing plain Python functions.
 
@@ -19,7 +19,7 @@ import dataclasses
 from dataclasses import dataclass
 from typing import Optional
 
-from state_machine import StateMachine
+from free_state import StateMachine
 
 
 @dataclass(frozen=True)

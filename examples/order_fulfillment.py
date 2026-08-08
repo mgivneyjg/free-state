@@ -16,7 +16,7 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from state_machine import StateMachine  # noqa: E402
+from free_state import StateMachine  # noqa: E402
 
 DB_PATH = Path(__file__).parent / ".order_fulfillment_demo.db"
 DB_PATH.unlink(missing_ok=True)

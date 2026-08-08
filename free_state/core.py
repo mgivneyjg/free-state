@@ -56,7 +56,7 @@ class StateMachine:
     def __init__(
         self,
         context_type: Type[Any],
-        db_path: str = "./.state_machine.db",
+        db_path: str = "./.free_state.db",
         max_steps: int = 1000,
     ):
         if not dataclasses.is_dataclass(context_type):
