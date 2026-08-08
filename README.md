@@ -1,6 +1,7 @@
-# free-state
 
-A fluent, checkpointed state machine for sequencing plain Python functions.
+# Free State
+
+ A fluent, checkpointed state machine for sequencing plain Python functions.
 
 ## Core ideas
 
@@ -100,3 +101,7 @@ pip install -e .
 pip install pytest
 pytest
 ```
+
+## License
+
+[MIT](LICENSE.md)
