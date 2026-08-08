@@ -1,0 +1,15 @@
+[project]
+name = "state-machine"
+version = "0.1.0"
+description = "A fluent, checkpointed state machine for sequencing plain Python functions"
+requires-python = ">=3.9"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["state_machine"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
