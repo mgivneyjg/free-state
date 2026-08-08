@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Any, Callable, Optional, Type
 
 from .exceptions import MaxStepsExceededError, NoMatchingEdgeError, UnknownRunError
 from .storage import Storage
 
-Predicate = Callable[[dict], bool]
-StepFn = Callable[[dict], dict]
+Predicate = Callable[[Any], bool]
+StepFn = Callable[[Any], Any]
 
 
 @dataclass
@@ -32,7 +33,7 @@ class Step:
         self._default = target
         return self
 
-    def resolve_next(self, context: dict) -> Optional["Step"]:
+    def resolve_next(self, context: Any) -> Optional["Step"]:
         if not self._edges and self._default is None:
             return None
         for edge in self._edges:
@@ -44,7 +45,7 @@ class Step:
             f"step '{self.name}': no edge predicate matched and no .otherwise() default was defined"
         )
 
-    def __call__(self, context: dict) -> dict:
+    def __call__(self, context: Any) -> Any:
         return self.fn(context)
 
     def __repr__(self) -> str:
@@ -52,7 +53,17 @@ class Step:
 
 
 class StateMachine:
-    def __init__(self, db_path: str = "./.state_machine.db", max_steps: int = 1000):
+    def __init__(
+        self,
+        context_type: Type[Any],
+        db_path: str = "./.state_machine.db",
+        max_steps: int = 1000,
+    ):
+        if not dataclasses.is_dataclass(context_type):
+            raise TypeError(
+                f"context_type must be a dataclass type, got {context_type!r}"
+            )
+        self.context_type = context_type
         self.max_steps = max_steps
         self.steps: dict[str, Step] = {}
         self._start: Optional[str] = None
@@ -71,9 +82,10 @@ class StateMachine:
 
         return decorator
 
-    def run(self, context: dict) -> str:
+    def run(self, context: Any) -> str:
         if self._start is None:
             raise RuntimeError("no steps have been registered on this machine")
+        self._validate_context(context)
         run_id = str(uuid.uuid4())
         self._storage.create_run(run_id, self._start)
         self._execute(run_id, self._start, context)
@@ -87,13 +99,15 @@ class StateMachine:
     ) -> str:
         if start_at not in self.steps:
             raise KeyError(f"unknown step '{start_at}'")
-        context = self._storage.load_latest_checkpoint(run_id, start_at)
-        if context is None:
+        raw = self._storage.load_latest_checkpoint(run_id, start_at)
+        if raw is None:
             raise UnknownRunError(
                 f"no checkpoint found for run '{run_id}' at step '{start_at}'"
             )
+        context = self.context_type(**raw)
         if context_overrides:
-            context.update(context_overrides)
+            context = dataclasses.replace(context, **context_overrides)
+        self._validate_context(context)
         self._storage.update_run_status(run_id, "running", start_at)
         self._execute(run_id, start_at, context)
         return run_id
@@ -101,7 +115,14 @@ class StateMachine:
     def list_runs(self, status: Optional[str] = None) -> list:
         return self._storage.list_runs(status)
 
-    def _execute(self, run_id: str, start_step: str, context: dict) -> dict:
+    def _validate_context(self, context: Any) -> None:
+        if not isinstance(context, self.context_type):
+            raise TypeError(
+                f"expected context of type {self.context_type.__name__}, "
+                f"got {type(context).__name__}"
+            )
+
+    def _execute(self, run_id: str, start_step: str, context: Any) -> Any:
         current = self.steps[start_step]
         ctx = context
         steps_taken = 0
@@ -115,11 +136,12 @@ class StateMachine:
                     f"'{current.name}' (possible infinite loop)"
                 )
 
-            self._storage.save_checkpoint(run_id, current.name, ctx)
+            self._storage.save_checkpoint(run_id, current.name, dataclasses.asdict(ctx))
             self._storage.update_run_status(run_id, "running", current.name)
 
             try:
                 ctx = current.fn(ctx)
+                self._validate_context(ctx)
                 next_step = current.resolve_next(ctx)
             except Exception:
                 self._storage.update_run_status(run_id, "failed", current.name)

@@ -4,7 +4,8 @@ A fluent, checkpointed state machine for sequencing plain Python functions.
 
 ## Core ideas
 
-- A step is a plain function: `def step(ctx: dict) -> dict`.
+- A step is a plain function: `def step(ctx: T) -> T`, where `T` is a frozen
+  dataclass you define.
 - Steps are wired together with predicate edges, evaluated in declaration order.
 - Every run is checkpointed to SQLite before each step executes, so a crashed
   or failed run can be resumed from any step with its original context.
@@ -14,33 +15,42 @@ A fluent, checkpointed state machine for sequencing plain Python functions.
 ## Usage
 
 ```python
+import dataclasses
+from dataclasses import dataclass
+from typing import Optional
+
 from state_machine import StateMachine
 
-machine = StateMachine(db_path="./workflow.db", max_steps=1000)
+
+@dataclass(frozen=True)
+class AccountContext:
+    account_id: int
+    balance: int = 0
+    result: Optional[str] = None
+
+
+machine = StateMachine(context_type=AccountContext, db_path="./workflow.db", max_steps=1000)
 
 
 @machine.step("check_balance")
 def check_balance(ctx):
-    ctx["balance"] = fetch_balance(ctx["account_id"])
-    return ctx
+    return dataclasses.replace(ctx, balance=fetch_balance(ctx.account_id))
 
 
 @machine.step("approve")
 def approve(ctx):
-    ctx["result"] = "approved"
-    return ctx
+    return dataclasses.replace(ctx, result="approved")
 
 
 @machine.step("deny")
 def deny(ctx):
-    ctx["result"] = "denied"
-    return ctx
+    return dataclasses.replace(ctx, result="denied")
 
 
-check_balance.to(approve, when=lambda ctx: ctx["balance"] > 0)
+check_balance.to(approve, when=lambda ctx: ctx.balance > 0)
 check_balance.otherwise(deny)
 
-run_id = machine.run({"account_id": 7})
+run_id = machine.run(AccountContext(account_id=7))
 ```
 
 The first step registered on a machine is its implicit entry point. Any step
@@ -61,18 +71,27 @@ machine.list_runs(status="failed")
 
 machine.resume(run_id, start_at="check_balance")
 
-# or patch the context before retrying
+# or patch fields before retrying
 machine.resume(run_id, start_at="check_balance", context_overrides={"account_id": 8})
 ```
 
 `resume` re-executes the named step using the context exactly as it was
-checkpointed right before that step last ran, optionally patched with
-`context_overrides`.
+checkpointed right before that step last ran (reconstructed as a fresh
+`context_type` instance), optionally patched via `dataclasses.replace(ctx,
+**context_overrides)`.
 
 ### Context
 
-Context is a plain `dict` and must be JSON-serializable, since it's persisted
-to SQLite as a checkpoint before every step runs. Pass IDs, not live objects.
+Context is a **frozen dataclass** you define and pass to `StateMachine(context_type=...)`.
+Steps don't mutate it — they return a new instance via `dataclasses.replace(ctx, ...)`.
+Fields must be flat, JSON-serializable types (`str`, `int`, `float`, `bool`,
+`None`, `list`, `dict`) since the context is persisted to SQLite as a
+checkpoint before every step runs; nested dataclasses and enums as fields
+aren't supported. `StateMachine` validates at construction that `context_type`
+is a dataclass, and at `run()`/`resume()`/after every step that the value in
+hand is actually an instance of it — a step that forgets `dataclasses.replace`
+and returns something else fails immediately with a clear `TypeError` rather
+than corrupting a checkpoint.
 
 ## Development
 
