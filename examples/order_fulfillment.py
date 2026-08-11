@@ -8,11 +8,12 @@ An order-fulfillment workflow: more than a straight line of steps.
 Run it directly: .venv/bin/python examples/order_fulfillment.py
 """
 
+from __future__ import annotations
+
 import dataclasses
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -26,7 +27,7 @@ DB_PATH.unlink(missing_ok=True)
 class OrderContext:
     order_id: str
     items: list[str]
-    shipping_address: Optional[str]
+    shipping_address: str | None
 
     # scripted responses from external systems, for demo purposes only
     out_of_stock: list[str] = field(default_factory=list)
@@ -34,12 +35,12 @@ class OrderContext:
 
     # fields the steps below fill in as the order moves through the machine
     valid: bool = False
-    rejection_reason: Optional[str] = None
+    rejection_reason: str | None = None
     in_stock: bool = False
     unavailable_items: list[str] = field(default_factory=list)
     payment_attempts: int = 0
-    payment_status: Optional[str] = None
-    tracking_number: Optional[str] = None
+    payment_status: str | None = None
+    tracking_number: str | None = None
 
 
 machine = StateMachine(context_type=OrderContext, db_path=str(DB_PATH), max_steps=100)
@@ -98,32 +99,32 @@ def notify_backorder(ctx: OrderContext) -> OrderContext:
 def notify_payment_failed(ctx: OrderContext) -> OrderContext:
     print(
         f"  [notify] order {ctx.order_id} payment failed after "
-        f"{ctx.payment_attempts} attempt(s), last status: {ctx.payment_status}"
+        + f"{ctx.payment_attempts} attempt(s), last status: {ctx.payment_status}"
     )
     return ctx
 
 
-validate_order.to(check_inventory, when=lambda ctx: ctx.valid)
-validate_order.otherwise(reject_order)
+_ = validate_order.to(check_inventory, when=lambda ctx: ctx.valid)
+_ = validate_order.otherwise(reject_order)
 
-check_inventory.to(charge_payment, when=lambda ctx: ctx.in_stock)
-check_inventory.otherwise(notify_backorder)
+_ = check_inventory.to(charge_payment, when=lambda ctx: ctx.in_stock)
+_ = check_inventory.otherwise(notify_backorder)
 
-charge_payment.to(ship_order, when=lambda ctx: ctx.payment_status == "success")
-charge_payment.to(
+_ = charge_payment.to(ship_order, when=lambda ctx: ctx.payment_status == "success")
+_ = charge_payment.to(
     charge_payment,
     when=lambda ctx: ctx.payment_status == "error" and ctx.payment_attempts < 3,
 )
-charge_payment.otherwise(notify_payment_failed)  # declined, or errored out of retries
+_ = charge_payment.otherwise(notify_payment_failed)  # declined, or errored out of retries
 
-ship_order.otherwise(notify_shipped)
+_ = ship_order.otherwise(notify_shipped)
 
 
-def run_status(run_id):
+def run_status(run_id: str) -> dict[str, object]:
     return next(r for r in machine.list_runs() if r["run_id"] == run_id)
 
 
-SCENARIOS = [
+SCENARIOS: list[tuple[str, OrderContext]] = [
     (
         "happy path",
         OrderContext(order_id="A100", items=["mug"], shipping_address="1 Main St"),

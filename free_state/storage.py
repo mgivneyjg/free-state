@@ -1,13 +1,16 @@
+from __future__ import annotations
+
 import json
 import sqlite3
 from contextlib import closing
 from datetime import datetime, timezone
-from typing import Optional
+from typing import cast, final
 
 
+@final
 class Storage:
-    def __init__(self, db_path: str):
-        self.db_path = db_path
+    def __init__(self, db_path: str) -> None:
+        self.db_path: str = db_path
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
@@ -17,7 +20,7 @@ class Storage:
 
     def _init_db(self) -> None:
         with closing(self._connect()) as conn, conn:
-            conn.execute(
+            _ = conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS runs (
                     run_id TEXT PRIMARY KEY,
@@ -27,7 +30,7 @@ class Storage:
                 )
                 """
             )
-            conn.execute(
+            _ = conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS checkpoints (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -38,9 +41,11 @@ class Storage:
                 )
                 """
             )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_checkpoints_lookup "
-                "ON checkpoints (run_id, step_name, id)"
+            _ = conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_checkpoints_lookup
+                ON checkpoints (run_id, step_name, id)
+                """
             )
 
     @staticmethod
@@ -49,19 +54,19 @@ class Storage:
 
     def create_run(self, run_id: str, start_step: str) -> None:
         with closing(self._connect()) as conn, conn:
-            conn.execute(
+            _ = conn.execute(
                 "INSERT INTO runs (run_id, status, current_step, updated_at) VALUES (?, ?, ?, ?)",
                 (run_id, "running", start_step, self._now()),
             )
 
     def update_run_status(self, run_id: str, status: str, current_step: str) -> None:
         with closing(self._connect()) as conn, conn:
-            conn.execute(
+            _ = conn.execute(
                 "UPDATE runs SET status = ?, current_step = ?, updated_at = ? WHERE run_id = ?",
                 (status, current_step, self._now(), run_id),
             )
 
-    def save_checkpoint(self, run_id: str, step_name: str, context: dict) -> None:
+    def save_checkpoint(self, run_id: str, step_name: str, context: dict[str, object]) -> None:
         try:
             context_json = json.dumps(context)
         except TypeError as exc:
@@ -69,29 +74,35 @@ class Storage:
                 f"context for step '{step_name}' is not JSON-serializable: {exc}"
             ) from exc
         with closing(self._connect()) as conn, conn:
-            conn.execute(
+            _ = conn.execute(
                 "INSERT INTO checkpoints (run_id, step_name, context_json, created_at) VALUES (?, ?, ?, ?)",
                 (run_id, step_name, context_json, self._now()),
             )
 
-    def load_latest_checkpoint(self, run_id: str, step_name: str) -> Optional[dict]:
+    def load_latest_checkpoint(self, run_id: str, step_name: str) -> dict[str, object] | None:
         with closing(self._connect()) as conn:
-            row = conn.execute(
-                "SELECT context_json FROM checkpoints "
-                "WHERE run_id = ? AND step_name = ? ORDER BY id DESC LIMIT 1",
-                (run_id, step_name),
-            ).fetchone()
+            row = cast(
+                "sqlite3.Row | None",
+                conn.execute(
+                    """
+                    SELECT context_json FROM checkpoints
+                    WHERE run_id = ? AND step_name = ? ORDER BY id DESC LIMIT 1
+                    """,
+                    (run_id, step_name),
+                ).fetchone(),
+            )
         if row is None:
             return None
-        return json.loads(row["context_json"])
+        context_json = cast(str, row["context_json"])
+        return cast("dict[str, object]", json.loads(context_json))
 
-    def list_runs(self, status: Optional[str] = None) -> list:
+    def list_runs(self, status: str | None = None) -> list[dict[str, object]]:
         query = "SELECT run_id, status, current_step, updated_at FROM runs"
-        params: tuple = ()
+        params: tuple[str, ...] = ()
         if status is not None:
             query += " WHERE status = ?"
             params = (status,)
         query += " ORDER BY updated_at DESC"
         with closing(self._connect()) as conn:
-            rows = conn.execute(query, params).fetchall()
+            rows = cast("list[sqlite3.Row]", conn.execute(query, params).fetchall())
         return [dict(row) for row in rows]
