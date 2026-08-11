@@ -12,7 +12,6 @@ import dataclasses
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -26,7 +25,7 @@ DB_PATH.unlink(missing_ok=True)
 class OrderContext:
     order_id: str
     items: list[str]
-    shipping_address: Optional[str]
+    shipping_address: str | None
 
     # scripted responses from external systems, for demo purposes only
     out_of_stock: list[str] = field(default_factory=list)
@@ -34,12 +33,12 @@ class OrderContext:
 
     # fields the steps below fill in as the order moves through the machine
     valid: bool = False
-    rejection_reason: Optional[str] = None
+    rejection_reason: str | None = None
     in_stock: bool = False
     unavailable_items: list[str] = field(default_factory=list)
     payment_attempts: int = 0
-    payment_status: Optional[str] = None
-    tracking_number: Optional[str] = None
+    payment_status: str | None = None
+    tracking_number: str | None  = None
 
 
 machine = StateMachine(context_type=OrderContext, db_path=str(DB_PATH), max_steps=100)

@@ -5,6 +5,7 @@ from .exceptions import (
     StateMachineError,
     UnknownRunError,
 )
+from .storage import PostgresStorage, SQLiteStorage, Storage, create_storage
 
 __all__ = [
     "StateMachine",
@@ -13,4 +14,8 @@ __all__ = [
     "NoMatchingEdgeError",
     "MaxStepsExceededError",
     "UnknownRunError",
+    "Storage",
+    "SQLiteStorage",
+    "PostgresStorage",
+    "create_storage",
 ]

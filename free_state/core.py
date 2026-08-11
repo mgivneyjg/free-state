@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, Type
 
 from .exceptions import MaxStepsExceededError, NoMatchingEdgeError, UnknownRunError
-from .storage import Storage
+from .storage import Storage, create_storage
 
 Predicate = Callable[[Any], bool]
 StepFn = Callable[[Any], Any]
@@ -58,6 +58,7 @@ class StateMachine:
         context_type: Type[Any],
         db_path: str = "./.free_state.db",
         max_steps: int = 1000,
+        storage: Optional[Storage] = None,
     ):
         if not dataclasses.is_dataclass(context_type):
             raise TypeError(
@@ -67,7 +68,7 @@ class StateMachine:
         self.max_steps = max_steps
         self.steps: dict[str, Step] = {}
         self._start: Optional[str] = None
-        self._storage = Storage(db_path)
+        self._storage = storage if storage is not None else create_storage(db_path)
 
     def step(self, name: str):
         if name in self.steps:

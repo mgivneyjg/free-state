@@ -8,8 +8,9 @@
 - A step is a plain function: `def step(ctx: T) -> T`, where `T` is a frozen
   dataclass you define.
 - Steps are wired together with predicate edges, evaluated in declaration order.
-- Every run is checkpointed to SQLite before each step executes, so a crashed
-  or failed run can be resumed from any step with its original context.
+- Every run is checkpointed to a store (SQLite or Postgres) before each step
+  executes, so a crashed or failed run can be resumed from any step with its
+  original context.
 - Cycles are allowed (e.g. retry loops); a `max_steps` ceiling guards against
   infinite loops.
 
@@ -93,6 +94,43 @@ is a dataclass, and at `run()`/`resume()`/after every step that the value in
 hand is actually an instance of it — a step that forgets `dataclasses.replace`
 and returns something else fails immediately with a clear `TypeError` rather
 than corrupting a checkpoint.
+
+## Storage backends
+
+`StateMachine` picks its storage backend from `db_path`: a `postgresql://` or
+`postgres://` connection string selects Postgres, anything else is treated as
+a SQLite file path (the default).
+
+```python
+# SQLite (default)
+machine = StateMachine(context_type=OrderContext, db_path="./workflow.db")
+
+# Postgres
+machine = StateMachine(
+    context_type=OrderContext,
+    db_path="postgresql://user:pass@localhost:5432/workflow",
+)
+```
+
+Postgres support requires the optional `psycopg` dependency:
+
+```bash
+pip install "free-state[postgres]"
+```
+
+For full control (e.g. connection pooling, a pre-configured client), construct
+a storage backend directly and pass it as `storage=`, which takes precedence
+over `db_path`:
+
+```python
+from free_state import PostgresStorage
+
+storage = PostgresStorage("postgresql://user:pass@localhost:5432/workflow")
+machine = StateMachine(context_type=OrderContext, storage=storage)
+```
+
+Both backends implement the same `Storage` interface, so switching between
+them requires no changes to steps, edges, or the rest of your workflow.
 
 ## Development
 

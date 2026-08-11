@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "A fluent, checkpointed state machine for sequencing plain Python functions"
 requires-python = ">=3.9"
 
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1"]
+
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
